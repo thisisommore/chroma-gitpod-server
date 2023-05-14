@@ -106,7 +106,7 @@ class CollectionStateMachine(RuleBasedStateMachine):  # type: ignore
         c = self.api.get_or_create_collection(
             name=coll.name,
             metadata=new_metadata,
-            embedding_function=coll.embedding_function,  # type: ignore
+            embedding_function=coll.embedding_function,
         )
         assert c.name == coll.name
         assert c.metadata == coll.metadata
