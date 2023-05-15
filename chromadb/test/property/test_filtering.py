@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, cast
 from hypothesis import given, settings, HealthCheck
 from chromadb.api import API
 from chromadb.errors import NoDatapointsException
@@ -87,37 +87,39 @@ EMPTY_STRING: str = ""
 
 
 def _filter_embedding_set(
-    recordset: strategies.RecordSet, filter: strategies.Filter
+    record_set: strategies.RecordSet, filter: strategies.Filter
 ) -> IDs:
     """Return IDs from the embedding set that match the given filter object"""
 
-    recordset = invariants.wrap_all(recordset)
+    normalized_record_set = invariants.wrap_all(record_set)
 
-    ids = set(recordset["ids"])
+    ids = set(normalized_record_set["ids"])
 
     filter_ids = filter["ids"]
     if filter_ids is not None:
-        filter_ids = invariants.maybe_wrap(filter_ids)
+        filter_ids = invariants.wrap(filter_ids)
         assert filter_ids is not None
         # If the filter ids is an empty list then we treat that as get all
         if len(filter_ids) != 0:
             ids = ids.intersection(filter_ids)
 
-    for i in range(len(recordset["ids"])):
+    for i in range(len(normalized_record_set["ids"])):
         if filter["where"]:
             metadatas: Metadatas
-            if isinstance(recordset["metadatas"], list):
-                metadatas = recordset["metadatas"]
+            if isinstance(normalized_record_set["metadatas"], list):
+                metadatas = normalized_record_set["metadatas"]
             else:
-                metadatas = [EMPTY_DICT] * len(recordset["ids"])
+                metadatas = [EMPTY_DICT] * len(normalized_record_set["ids"])
             filter_where: Where = filter["where"]  # type: ignore
             if not _filter_where_clause(filter_where, metadatas[i]):
-                ids.discard(recordset["ids"][i])
+                ids.discard(normalized_record_set["ids"][i])
 
         if filter["where_document"]:
-            documents = recordset["documents"] or [EMPTY_STRING] * len(recordset["ids"])
+            documents = normalized_record_set["documents"] or [EMPTY_STRING] * len(
+                normalized_record_set["ids"]
+            )
             if not _filter_where_doc_clause(filter["where_document"], documents[i]):
-                ids.discard(recordset["ids"][i])
+                ids.discard(normalized_record_set["ids"][i])
 
     return list(ids)
 
@@ -179,7 +181,7 @@ def test_filterable_metadata_query(
     caplog,
     api: API,
     collection: strategies.Collection,
-    recordset: strategies.RecordSet,
+    record_set: strategies.RecordSet,
     filters,
 ) -> None:
     caplog.set_level(logging.ERROR)
@@ -190,20 +192,22 @@ def test_filterable_metadata_query(
         metadata=collection.metadata,
         embedding_function=collection.embedding_function,
     )
-    coll.add(**recordset)
-    recordset = invariants.wrap_all(recordset)
-    total_count = len(recordset["ids"])
+    coll.add(**record_set)
+    normalized_record_set = invariants.wrap_all(record_set)
+    total_count = len(normalized_record_set["ids"])
     # Pick a random vector
     random_query: Embedding
     if collection.has_embeddings:
-        assert recordset["embeddings"] is not None
-        assert all(isinstance(e, list) for e in recordset["embeddings"])
-        random_query = recordset["embeddings"][random.randint(0, total_count - 1)]  # type: ignore
+        assert normalized_record_set["embeddings"] is not None
+        assert all(isinstance(e, list) for e in normalized_record_set["embeddings"])
+        random_query = normalized_record_set["embeddings"][
+            random.randint(0, total_count - 1)
+        ]
     else:
-        assert isinstance(recordset["documents"], list)
+        assert isinstance(normalized_record_set["documents"], list)
         assert collection.embedding_function is not None
         random_query = collection.embedding_function(
-            [recordset["documents"][random.randint(0, total_count - 1)]]
+            [normalized_record_set["documents"][random.randint(0, total_count - 1)]]
         )[0]
     for filter in filters:
         try:
@@ -217,5 +221,9 @@ def test_filterable_metadata_query(
             )
         except NoDatapointsException:
             result_ids = set()
-        expected_ids = set(_filter_embedding_set(recordset, filter))
+        expected_ids = set(
+            _filter_embedding_set(
+                cast(strategies.RecordSet, normalized_record_set), filter
+            )
+        )
         assert len(result_ids.intersection(expected_ids)) == len(result_ids)

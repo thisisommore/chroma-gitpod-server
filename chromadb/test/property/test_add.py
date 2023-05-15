@@ -1,3 +1,4 @@
+from typing import cast
 import pytest
 import hypothesis.strategies as st
 from hypothesis import given, settings
@@ -14,7 +15,9 @@ collection_st = st.shared(strategies.collections(with_hnsw_params=True), key="co
 )  # type: ignore
 @settings(deadline=None)  # type: ignore
 def test_add(
-    api: API, collection: strategies.Collection, embeddings: strategies.RecordSet
+    api: API,
+    collection: strategies.Collection,
+    record_set: strategies.RecordSet,
 ):
     api.reset()
 
@@ -24,14 +27,14 @@ def test_add(
         metadata=collection.metadata,
         embedding_function=collection.embedding_function,
     )
-    coll.add(**embeddings)
+    coll.add(**record_set)
 
-    embeddings = invariants.wrap_all(embeddings)
-    invariants.count(coll, embeddings)
-    n_results = max(1, (len(embeddings["ids"]) // 10))
+    normalized_record_set = invariants.wrap_all(record_set)
+    invariants.count(coll, cast(strategies.RecordSet, normalized_record_set))
+    n_results = max(1, (len(normalized_record_set["ids"]) // 10))
     invariants.ann_accuracy(
         coll,
-        embeddings,
+        cast(strategies.RecordSet, normalized_record_set),
         n_results=n_results,
         embedding_function=collection.embedding_function,
     )
