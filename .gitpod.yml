@@ -1,5 +1,8 @@
 tasks:
-  - command: docker-compose up -d --build && gp url 8000
+  - name: "Docker compose"
+    command: |
+      docker-compose up -d --build
+      gp url 8000
 
 ports:
   - port: 8000
